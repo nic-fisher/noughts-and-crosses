@@ -10,5 +10,6 @@ A simple game of noughts and crosses against a computer in the terminal.
 
 ### Todo
 
-- Tidy up board generation and move to ui.rs
-- Create struct for game state that includes board_state(cells), current_player, winner
+- Create channel for app
+- Run input in seperate thread
+- Create mod for Computer that runs on seperate thread
