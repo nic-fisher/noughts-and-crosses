@@ -1,22 +1,13 @@
-use crossterm::{
-    event::{read, DisableMouseCapture, Event, KeyCode, KeyEvent},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
-};
-
 use std::io;
 use tui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    symbols::line::THICK,
-    symbols::DOT,
-    text::{Span, Spans},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table, TableState, Tabs},
-    Terminal,
+    style::{Color, Style},
+    text::Span,
+    widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table},
 };
 
-use crate::app::{App, BoardCell, Player, BoardCellState};
+use crate::app::{App, BoardCell, BoardCellState, Player};
 
 pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
     let chunks = Layout::default()
@@ -24,25 +15,42 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
         .margin(1)
         .constraints(
             [
+                Constraint::Percentage(20),
+                Constraint::Percentage(60),
                 Constraint::Percentage(10),
-                Constraint::Percentage(80),
                 Constraint::Percentage(10),
             ]
             .as_ref(),
         )
         .split(f.size());
 
-    let header_block = Block::default()
-        .title("Noughts and Crosses")
-        .borders(Borders::ALL);
-    f.render_widget(header_block, chunks[0]);
+    let items = [
+        ListItem::new(" "),
+        ListItem::new("Use the below keys to update the game"),
+        ListItem::new(" "),
+        ListItem::new("New game => N"),
+        ListItem::new("Easy => E"),
+        ListItem::new("Hard => H"),
+    ];
+    let v = List::new(items)
+        .block(Block::default().title("Game Options").borders(Borders::ALL))
+        .style(Style::default().fg(Color::White));
 
-    let footer_block = Block::default().title("Instructions").borders(Borders::ALL);
-    let footer_text = Span::raw(app.instructions.clone());
-    let footer_paragraph = Paragraph::new(footer_text)
-        .block(footer_block)
+    f.render_widget(v, chunks[0]);
+
+    let instructions_block = Block::default().title("Instructions").borders(Borders::ALL);
+    let instructions_text = Span::raw(app.instructions.clone());
+    let instructions_paragraph = Paragraph::new(instructions_text)
+        .block(instructions_block)
         .alignment(Alignment::Left);
-    f.render_widget(footer_paragraph, chunks[2]);
+    f.render_widget(instructions_paragraph, chunks[2]);
+
+    let chat_block = Block::default().title("Chat").borders(Borders::ALL);
+    let chat_text = Span::raw(app.chat.clone());
+    let chat_paragraph = Paragraph::new(chat_text)
+        .block(chat_block)
+        .alignment(Alignment::Left);
+    f.render_widget(chat_paragraph, chunks[3]);
 
     let game_block = Block::default().title("Game").borders(Borders::ALL);
     f.render_widget(game_block, chunks[1]);
@@ -50,7 +58,7 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
     let game_table = Table::new(app.game_state.board_state.cells.iter().rev().map(|c| {
         Row::new(c.iter().map(|cell_with_state| match cell_with_state {
             BoardCellState::Selected(cell) => build_board_cell(&cell, Color::Green),
-            BoardCellState::NotSelected(cell) => build_board_cell(&cell, Color::Reset)
+            BoardCellState::NotSelected(cell) => build_board_cell(&cell, Color::Reset),
         }))
     }))
     .style(Style::default().fg(Color::White))
@@ -64,12 +72,15 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
     f.render_widget(game_table, generate_game_area(chunks[1]));
 }
 
-
 fn build_board_cell(cell: &BoardCell, background_color: Color) -> Cell {
     match cell {
         BoardCell::Empty => Cell::from("  *  ").style(Style::default().bg(background_color)),
-        BoardCell::Occupied(Player::Player) => Cell::from("  x  ").style(Style::default().fg(Color::Yellow).bg(background_color)),
-        BoardCell::Occupied(Player::Computer) => Cell::from("  o  ").style(Style::default().fg(Color::Yellow).bg(background_color)),
+        BoardCell::Occupied(Player::User) => {
+            Cell::from("  x  ").style(Style::default().fg(Color::Yellow).bg(background_color))
+        }
+        BoardCell::Occupied(Player::Computer) => {
+            Cell::from("  o  ").style(Style::default().fg(Color::Yellow).bg(background_color))
+        }
     }
 }
 

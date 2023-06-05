@@ -10,6 +10,8 @@ A simple game of noughts and crosses against a computer in the terminal.
 
 ### Todo
 
-- Create channel for app
-- Run input in seperate thread
-- Create mod for Computer that runs on seperate thread
+- Add difficultly level to game state
+- Update difficulty level when E or H is selected
+- Change logic based on difficulty level
+- Add more instructions
+- Randomly select the player that goes first

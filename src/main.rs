@@ -1,19 +1,25 @@
 mod app;
+mod computer;
+mod input;
 mod ui;
 
 use std::io;
 
 use crossterm::{
-    event::{read, DisableMouseCapture, Event, KeyCode, KeyEvent},
+    event::DisableMouseCapture,
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 
-use app::{App};
+use app::App;
+use computer::{Action, Trigger};
+use input::InputKey;
+use std::sync::mpsc::{self, Receiver, Sender};
 use tui::{backend::CrosstermBackend, Terminal};
 
-pub enum Message {
-    KeyPressed
+pub enum Event {
+    UserInput(InputKey),
+    ComputerAction(Action),
 }
 
 fn main() -> Result<(), io::Error> {
@@ -25,47 +31,30 @@ fn main() -> Result<(), io::Error> {
 
     let mut app = App::default();
 
+    let (sender, receiver): (Sender<Event>, Receiver<Event>) = mpsc::channel();
+    input::start(sender.clone());
+    let computer_sender = computer::start(sender.clone());
+
     loop {
         terminal.draw(|f| {
             ui::draw(f, &app);
         })?;
 
-        match read()? {
-            Event::Key(KeyEvent {
-                code: KeyCode::Esc, ..
-            }) => break,
-            Event::Key(KeyEvent {
-                code: KeyCode::Up, ..
-            }) => {
-                app.up();
+        match receiver.recv().unwrap() {
+            Event::UserInput(InputKey::Esc) => break,
+            Event::UserInput(input_key) => {
+                handle_user_input(&mut app, input_key, &computer_sender);
             }
-            Event::Key(KeyEvent {
-                code: KeyCode::Down, ..
-            }) => {
-                app.down();
+            Event::ComputerAction(Action::Chat(words)) => {
+                app.chat = [String::from("Computer:"), words].join(" ");
             }
-            Event::Key(KeyEvent {
-                code: KeyCode::Left, ..
-            }) => {
-                app.left();
+            Event::ComputerAction(Action::PlaceToken(row, column)) => {
+                app.computer_place_token((row, column), &computer_sender);
             }
-            Event::Key(KeyEvent {
-                code: KeyCode::Right, ..
-            }) => {
-                app.right();
+            Event::ComputerAction(Action::PlaceTokenError) => {
+                app.instructions =
+                    "Oh no, looks like the computer has hit an error when trying to place a token"
             }
-            Event::Key(KeyEvent {
-                code: KeyCode::Enter, ..
-            }) => {
-                app.enter();
-            }
-            Event::Key(KeyEvent {
-                code: KeyCode::Char(c),
-                ..
-            }) => {
-                println!("This is the key: {:?}", c)
-            }
-            _ => (),
         }
     }
 
@@ -78,4 +67,29 @@ fn main() -> Result<(), io::Error> {
     terminal.show_cursor()?;
 
     Ok(())
+}
+
+fn handle_user_input(app: &mut App, input_key: InputKey, computer_sender: &Sender<Trigger>) {
+    match input_key {
+        InputKey::Up => {
+            app.up();
+        }
+        InputKey::Down => {
+            app.down();
+        }
+        InputKey::Left => {
+            app.left();
+        }
+        InputKey::Right => {
+            app.right();
+        }
+        InputKey::Enter => {
+            app.enter(computer_sender);
+        }
+        InputKey::Char('n') => {
+            app.new_game();
+        }
+        InputKey::Unhandled => (),
+        _ => (),
+    }
 }
