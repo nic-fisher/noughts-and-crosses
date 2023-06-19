@@ -57,6 +57,18 @@ pub fn start(sender: Sender<Event>) {
                 sender.send(Event::UserInput(InputKey::Char('n'))).unwrap();
             }
             CrosstermEvent::Key(KeyEvent {
+                code: KeyCode::Char('e'),
+                ..
+            }) => {
+                sender.send(Event::UserInput(InputKey::Char('e'))).unwrap();
+            }
+            CrosstermEvent::Key(KeyEvent {
+                code: KeyCode::Char('h'),
+                ..
+            }) => {
+                sender.send(Event::UserInput(InputKey::Char('h'))).unwrap();
+            }
+            CrosstermEvent::Key(KeyEvent {
                 code: KeyCode::Char(c),
                 ..
             }) => {

@@ -11,7 +11,7 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 
-use app::App;
+use app::{App, Level};
 use computer::{Action, Trigger};
 use input::InputKey;
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -88,6 +88,12 @@ fn handle_user_input(app: &mut App, input_key: InputKey, computer_sender: &Sende
         }
         InputKey::Char('n') => {
             app.new_game();
+        }
+        InputKey::Char('h') => {
+            app.update_level(Level::Hard);
+        }
+        InputKey::Char('e') => {
+            app.update_level(Level::Easy);
         }
         InputKey::Unhandled => (),
         _ => (),

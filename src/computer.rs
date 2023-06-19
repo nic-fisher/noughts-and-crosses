@@ -1,5 +1,5 @@
 use crate::{
-    app::{BoardCell, BoardCellState, BoardState},
+    app::{BoardCell, BoardCellState, BoardState, GameState, Level, Player},
     Event,
 };
 use rand::Rng;
@@ -15,9 +15,10 @@ pub enum Action {
 
 // Events received
 pub enum Trigger {
-    ComputersTurn(BoardState),
+    ComputersTurn(GameState),
     Loser,
     Winner,
+    Draw,
 }
 
 pub fn start(sender: Sender<Event>) -> Sender<Trigger> {
@@ -26,12 +27,15 @@ pub fn start(sender: Sender<Event>) -> Sender<Trigger> {
 
     std::thread::spawn(move || loop {
         match computer_receiver.recv().unwrap() {
-            Trigger::ComputersTurn(board_state) => {
-                thread::sleep(Duration::from_secs(2));
+            Trigger::Draw => {
+                send_chat_event("Looks like it's a draw. Want to play again?", &sender);
+            }
+            Trigger::ComputersTurn(game_state) => {
+                wait_in_seconds(2);
                 thinking(&sender);
-                thread::sleep(Duration::from_secs(5));
+                wait_in_seconds(5);
 
-                match find_empty_cell(board_state) {
+                match find_empty_cell(game_state) {
                     Some((row, column)) => sender
                         .send(Event::ComputerAction(Action::PlaceToken(row, column)))
                         .unwrap(),
@@ -95,7 +99,19 @@ fn send_chat_event(chat_message: &str, sender: &Sender<Event>) {
         .unwrap();
 }
 
-fn find_empty_cell(board_state: BoardState) -> Option<(usize, usize)> {
+fn find_empty_cell(game_state: GameState) -> Option<(usize, usize)> {
+    match game_state.difficulty_level {
+        Level::Easy => find_any_empty_cell(game_state.board_state),
+        Level::Hard => find_best_empty_cell(game_state.board_state),
+    }
+}
+
+fn find_best_empty_cell(board_state: BoardState) -> Option<(usize, usize)> {
+    find_winning_cell(board_state)
+        .or_else(|| find_defending_cell(board_state).or_else(|| find_any_empty_cell(board_state)))
+}
+
+fn find_any_empty_cell(board_state: BoardState) -> Option<(usize, usize)> {
     let available_cells = board_state.cells.iter().enumerate().fold(
         vec![],
         |mut acc: Vec<(usize, usize)>, (row, cells)| {
@@ -117,4 +133,69 @@ fn find_empty_cell(board_state: BoardState) -> Option<(usize, usize)> {
     let random_available_cell_index = rand::thread_rng().gen_range(0..available_cells.len());
 
     Some(available_cells[random_available_cell_index])
+}
+
+fn find_winning_cell(board_state: BoardState) -> Option<(usize, usize)> {
+    let two_in_combination = player_with_two_in_combination(board_state, Player::Computer);
+
+    find_empty_cell_in_combination(board_state, two_in_combination)
+}
+
+fn find_defending_cell(board_state: BoardState) -> Option<(usize, usize)> {
+    let two_in_combination = player_with_two_in_combination(board_state, Player::User);
+
+    find_empty_cell_in_combination(board_state, two_in_combination)
+}
+
+fn player_with_two_in_combination(
+    board_state: BoardState,
+    player: Player,
+) -> Option<&'static [(usize, usize); 3]> {
+    BoardState::winning_combinations()
+        .iter()
+        .find(|combination| {
+            let in_combination = combination.iter().fold(0, |mut count: i32, cell_position| {
+                let (row, column) = cell_position;
+
+                match board_state.cells[*row][*column] {
+                    BoardCellState::Selected(BoardCell::Occupied(cell_player))
+                    | BoardCellState::NotSelected(BoardCell::Occupied(cell_player)) => {
+                        if cell_player == player {
+                            count = count + 1;
+                        } else {
+                            count = count - 1;
+                        }
+                    }
+                    _ => (),
+                }
+                count
+            });
+
+            in_combination == 2
+        })
+}
+
+fn find_empty_cell_in_combination(
+    board_state: BoardState,
+    combination: Option<&[(usize, usize); 3]>,
+) -> Option<(usize, usize)> {
+    if combination.is_none() {
+        return None;
+    }
+
+    let cell_option =
+        combination
+            .unwrap()
+            .iter()
+            .find(|(row, column)| match board_state.cells[*row][*column] {
+                BoardCellState::Selected(BoardCell::Empty)
+                | BoardCellState::NotSelected(BoardCell::Empty) => true,
+                _ => false,
+            });
+
+    if let Some((row, column)) = cell_option {
+        return Some((*row, *column));
+    } else {
+        None
+    }
 }

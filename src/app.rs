@@ -1,3 +1,4 @@
+use std::fmt::{self, Display};
 use std::sync::mpsc::Sender;
 
 use crate::computer::Trigger;
@@ -23,6 +24,7 @@ impl App<'_> {
                 current_turn: Player::User,
                 winner: None,
                 board_state: BoardState::default(),
+                difficulty_level: Level::Hard,
             },
             cursor_location: CursorLocation::default(),
         }
@@ -94,19 +96,39 @@ impl App<'_> {
     }
 
     pub fn new_game(&mut self) {
-        let game_finished = self.game_state.board_state.cells.into_iter().all(|row| {
+        if self.game_finished() || self.game_state.winner != None {
+            self.restart_game();
+        } else {
+            self.instructions = "Unable to start a new game until the current game is finished.";
+        }
+    }
+
+    pub fn update_level(&mut self, level: Level) {
+        if self.game_finished() || self.game_state.winner != None || !self.game_started() {
+            self.game_state.difficulty_level = level;
+        } else {
+            self.instructions = "Unable to update the difficulty while the game has started.";
+        }
+    }
+
+    fn game_started(&mut self) -> bool {
+        self.game_state.board_state.cells.into_iter().any(|row| {
             row.into_iter().any(|cell| match cell {
                 BoardCellState::NotSelected(BoardCell::Occupied(_player))
                 | BoardCellState::Selected(BoardCell::Occupied(_player)) => true,
                 _ => false,
             })
-        });
+        })
+    }
 
-        if game_finished || self.game_state.winner != None {
-            self.restart_game();
-        } else {
-            self.instructions = "Unable to start a new game until the current game is finished.";
-        }
+    fn game_finished(&mut self) -> bool {
+        self.game_state.board_state.cells.into_iter().all(|row| {
+            row.into_iter().all(|cell| match cell {
+                BoardCellState::NotSelected(BoardCell::Occupied(_player))
+                | BoardCellState::Selected(BoardCell::Occupied(_player)) => true,
+                _ => false,
+            })
+        })
     }
 
     pub fn computer_place_token(
@@ -162,9 +184,11 @@ impl Default for CursorLocation {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
 pub struct GameState {
     pub board_state: BoardState,
     pub current_turn: Player,
+    pub difficulty_level: Level,
     winner: Option<Player>,
 }
 
@@ -289,7 +313,7 @@ impl BoardState {
         player
     }
 
-    fn winning_combinations() -> &'static [[(usize, usize); 3]; 8] {
+    pub fn winning_combinations() -> &'static [[(usize, usize); 3]; 8] {
         const WINNING_COMBINATIONS: [[(usize, usize); 3]; 8] = [
             [(0, 0), (0, 1), (0, 2)],
             [(1, 0), (1, 1), (1, 2)],
@@ -320,9 +344,15 @@ impl PlaceTokenResult {
     ) {
         match self {
             PlaceTokenResult::Success => {
-                app.chat = String::from("Computer: Ok, your turn!");
-                app.instructions = "Press enter to your place token.";
-                app.game_state.swap_current_turn()
+                if app.game_finished() && app.game_state.winner.is_none() {
+                    computer_sender.send(Trigger::Draw).unwrap();
+
+                    app.instructions = "It's a tie.";
+                } else {
+                    app.chat = String::from("Computer: Ok, your turn!");
+                    app.instructions = "Press enter to your place token.";
+                    app.game_state.swap_current_turn()
+                }
             }
             PlaceTokenResult::SuccessWithWinner(_player) => {
                 app.game_state.winner = Some(Player::Computer);
@@ -340,11 +370,17 @@ impl PlaceTokenResult {
             PlaceTokenResult::Success => {
                 app.game_state.swap_current_turn();
 
-                computer_sender
-                    .send(Trigger::ComputersTurn(app.game_state.board_state))
-                    .unwrap();
+                if app.game_finished() && app.game_state.winner.is_none() {
+                    computer_sender.send(Trigger::Draw).unwrap();
 
-                app.instructions = "Computers turn.";
+                    app.instructions = "It's a tie.";
+                } else {
+                    computer_sender
+                        .send(Trigger::ComputersTurn(app.game_state))
+                        .unwrap();
+
+                    app.instructions = "Computers turn.";
+                }
             }
             PlaceTokenResult::SuccessWithWinner(_player) => {
                 app.game_state.winner = Some(Player::User);
@@ -375,6 +411,18 @@ pub enum BoardCell {
     Occupied(Player),
 }
 
+impl Display for BoardCell {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let board_cell = match &self {
+            BoardCell::Empty => "  *  ",
+            BoardCell::Occupied(Player::Computer) => "  o  ",
+            BoardCell::Occupied(Player::User) => "  x  ",
+        };
+
+        f.write_str(board_cell)
+    }
+}
+
 impl Default for BoardCellState {
     fn default() -> Self {
         BoardCellState::NotSelected(BoardCell::Empty)
@@ -385,4 +433,21 @@ impl Default for BoardCellState {
 pub enum Player {
     User,
     Computer,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Level {
+    Easy,
+    Hard,
+}
+
+impl Display for Level {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let level = match &self {
+            Level::Easy => "Easy",
+            Level::Hard => "Hard",
+        };
+
+        f.write_str(level)
+    }
 }

@@ -15,8 +15,8 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
         .margin(1)
         .constraints(
             [
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
+                Constraint::Percentage(25),
+                Constraint::Percentage(55),
                 Constraint::Percentage(10),
                 Constraint::Percentage(10),
             ]
@@ -31,6 +31,11 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
         ListItem::new("New game => N"),
         ListItem::new("Easy => E"),
         ListItem::new("Hard => H"),
+        ListItem::new(" "),
+        ListItem::new(format!(
+            "Selected level: {}",
+            app.game_state.difficulty_level
+        )),
     ];
     let v = List::new(items)
         .block(Block::default().title("Game Options").borders(Borders::ALL))
@@ -74,13 +79,13 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
 
 fn build_board_cell(cell: &BoardCell, background_color: Color) -> Cell {
     match cell {
-        BoardCell::Empty => Cell::from("  *  ").style(Style::default().bg(background_color)),
-        BoardCell::Occupied(Player::User) => {
-            Cell::from("  x  ").style(Style::default().fg(Color::Yellow).bg(background_color))
+        BoardCell::Empty => {
+            Cell::from(format!("{}", cell)).style(Style::default().bg(background_color))
         }
-        BoardCell::Occupied(Player::Computer) => {
-            Cell::from("  o  ").style(Style::default().fg(Color::Yellow).bg(background_color))
-        }
+        BoardCell::Occupied(Player::User) => Cell::from(format!("{}", cell))
+            .style(Style::default().fg(Color::Yellow).bg(background_color)),
+        BoardCell::Occupied(Player::Computer) => Cell::from(format!("{}", cell))
+            .style(Style::default().fg(Color::Yellow).bg(background_color)),
     }
 }
 
