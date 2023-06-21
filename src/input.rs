@@ -51,6 +51,12 @@ pub fn start(sender: Sender<Event>) {
                 sender.send(Event::UserInput(InputKey::Enter)).unwrap();
             }
             CrosstermEvent::Key(KeyEvent {
+                code: KeyCode::Char('s'),
+                ..
+            }) => {
+                sender.send(Event::UserInput(InputKey::Char('s'))).unwrap();
+            }
+            CrosstermEvent::Key(KeyEvent {
                 code: KeyCode::Char('n'),
                 ..
             }) => {
@@ -69,10 +75,10 @@ pub fn start(sender: Sender<Event>) {
                 sender.send(Event::UserInput(InputKey::Char('h'))).unwrap();
             }
             CrosstermEvent::Key(KeyEvent {
-                code: KeyCode::Char(c),
+                code: KeyCode::Char('c'),
                 ..
             }) => {
-                println!("This is the key: {:?}", c)
+                sender.send(Event::UserInput(InputKey::Char('c'))).unwrap();
             }
             _ => (),
         }

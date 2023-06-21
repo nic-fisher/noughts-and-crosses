@@ -1,30 +1,34 @@
 use std::fmt::{self, Display};
 use std::sync::mpsc::Sender;
 
-use crate::computer::Trigger;
+use rand::Rng;
+
+use crate::computer::{Character, Trigger};
 
 const BOARD_ROWS: usize = 3;
 const BOARD_COLUMNS: usize = 3;
 const MAX_BOARD_ROWS_INDEX: usize = BOARD_ROWS - 1;
 const MAX_BOARD_COLUMNS_INDEX: usize = BOARD_COLUMNS - 1;
 
-pub struct App<'a> {
-    pub instructions: &'a str,
+pub struct App {
+    pub instructions: String,
     pub chat: String,
     pub game_state: GameState,
     pub cursor_location: CursorLocation,
 }
 
-impl App<'_> {
-    pub fn default() -> App<'static> {
+impl App {
+    pub fn default() -> App {
         App {
-            instructions: "Press enter to place your token.",
+            instructions: String::from("Press S to start game."),
             chat: String::from(""),
             game_state: GameState {
                 current_turn: Player::User,
                 winner: None,
                 board_state: BoardState::default(),
-                difficulty_level: Level::Hard,
+                difficulty_level: Level::Easy,
+                started: false,
+                computer_character: Character::SpeedySteve,
             },
             cursor_location: CursorLocation::default(),
         }
@@ -78,13 +82,16 @@ impl App<'_> {
     pub fn enter(&mut self, computer_sender: &Sender<Trigger>) {
         let CursorLocation { row, column } = self.cursor_location;
 
-        if self.game_state.winner != None {
+        if self.game_state.winner != None || !self.game_state.started {
             return;
         }
 
         match self.game_state.current_turn {
             Player::Computer => {
-                self.instructions = "Computers turns. Please wait.";
+                self.instructions = format!(
+                    "{}s turns. Please wait.",
+                    self.game_state.computer_character
+                );
             }
             Player::User => {
                 self.game_state
@@ -95,30 +102,60 @@ impl App<'_> {
         }
     }
 
+    pub fn start_game(&mut self, computer_sender: &Sender<Trigger>) {
+        if !self.game_state.started {
+            let players = [Player::User, Player::Computer];
+            // Generate random number in the range [0, 1]
+            let starting_player = players[rand::thread_rng().gen_range(0..2)];
+
+            self.game_state.current_turn = starting_player;
+            self.game_state.started = true;
+
+            if starting_player == Player::Computer {
+                self.instructions = format!(
+                    "Game started! {} will go first.",
+                    self.game_state.computer_character
+                );
+                computer_sender.send(Trigger::ComputersTurnFirst).unwrap();
+            } else {
+                self.instructions =
+                    String::from("Game started! Your turn first. Press enter to your place token.");
+            }
+        } else {
+            self.instructions = String::from("Game is already started.")
+        }
+    }
+
     pub fn new_game(&mut self) {
         if self.game_finished() || self.game_state.winner != None {
             self.restart_game();
         } else {
-            self.instructions = "Unable to start a new game until the current game is finished.";
+            self.instructions =
+                String::from("Unable to start a new game until the current game is finished.");
         }
     }
 
     pub fn update_level(&mut self, level: Level) {
-        if self.game_finished() || self.game_state.winner != None || !self.game_started() {
+        if self.game_finished() || self.game_state.winner != None || !self.game_state.started {
             self.game_state.difficulty_level = level;
         } else {
-            self.instructions = "Unable to update the difficulty while the game has started.";
+            self.instructions =
+                String::from("Unable to update the difficulty while the game has started.");
         }
     }
 
-    fn game_started(&mut self) -> bool {
-        self.game_state.board_state.cells.into_iter().any(|row| {
-            row.into_iter().any(|cell| match cell {
-                BoardCellState::NotSelected(BoardCell::Occupied(_player))
-                | BoardCellState::Selected(BoardCell::Occupied(_player)) => true,
-                _ => false,
-            })
-        })
+    pub fn swap_computer_character(&mut self) {
+        if self.game_finished() || self.game_state.winner != None || !self.game_state.started {
+            let new_computer_character = match self.game_state.computer_character {
+                Character::ChattyDave => Character::SpeedySteve,
+                Character::SpeedySteve => Character::ChattyDave,
+            };
+
+            self.game_state.computer_character = new_computer_character;
+        } else {
+            self.instructions =
+                String::from("Unable to change your opponent while the game is being played.");
+        }
     }
 
     fn game_finished(&mut self) -> bool {
@@ -165,10 +202,11 @@ impl App<'_> {
     }
 
     pub fn restart_game(&mut self) {
-        self.instructions = "New game";
+        self.instructions = String::from("Press S to start game.");
         self.game_state.board_state = BoardState::default();
         self.cursor_location = CursorLocation::default();
-        self.game_state.current_turn = Player::User;
+        self.game_state.winner = None;
+        self.game_state.started = false;
     }
 }
 
@@ -189,6 +227,8 @@ pub struct GameState {
     pub board_state: BoardState,
     pub current_turn: Player,
     pub difficulty_level: Level,
+    pub started: bool,
+    pub computer_character: Character,
     winner: Option<Player>,
 }
 
@@ -347,20 +387,25 @@ impl PlaceTokenResult {
                 if app.game_finished() && app.game_state.winner.is_none() {
                     computer_sender.send(Trigger::Draw).unwrap();
 
-                    app.instructions = "It's a tie.";
+                    app.instructions = String::from(
+                        "It's a tie. Press N to clear the board and S to start a new game.",
+                    );
                 } else {
-                    app.chat = String::from("Computer: Ok, your turn!");
-                    app.instructions = "Press enter to your place token.";
+                    app.chat = format!("{}: Ok, your turn!", app.game_state.computer_character);
+                    app.instructions = String::from("Press enter to your place token.");
                     app.game_state.swap_current_turn()
                 }
             }
             PlaceTokenResult::SuccessWithWinner(_player) => {
                 app.game_state.winner = Some(Player::Computer);
-                app.instructions = "The computer wins!";
+                app.instructions = format!(
+                    "{} wins! Press N to clear the board and S to start a new game.",
+                    app.game_state.computer_character
+                );
                 computer_sender.send(Trigger::Winner).unwrap();
             }
             _ => {
-                app.instructions = "Oops, something went wrong.";
+                app.instructions = String::from("Oops, something went wrong.");
             }
         }
     }
@@ -373,28 +418,35 @@ impl PlaceTokenResult {
                 if app.game_finished() && app.game_state.winner.is_none() {
                     computer_sender.send(Trigger::Draw).unwrap();
 
-                    app.instructions = "It's a tie.";
+                    app.instructions = String::from(
+                        "It's a tie. Press N to clear the board and S to start a new game.",
+                    );
                 } else {
                     computer_sender
                         .send(Trigger::ComputersTurn(app.game_state))
                         .unwrap();
 
-                    app.instructions = "Computers turn.";
+                    app.instructions = format!("{}s turn.", app.game_state.computer_character);
                 }
             }
             PlaceTokenResult::SuccessWithWinner(_player) => {
                 app.game_state.winner = Some(Player::User);
-                app.instructions = "You win! Press N to start a new game.";
+                app.instructions = String::from(
+                    "You win! Press N to clear the game board and S to start a new game.",
+                );
                 computer_sender.send(Trigger::Loser).unwrap();
             }
             PlaceTokenResult::OccupiedByComputer => {
-                app.instructions = "This cell is already occupied by the computer.";
+                app.instructions = format!(
+                    "This cell is already occupied by {}.",
+                    app.game_state.computer_character
+                );
             }
             PlaceTokenResult::OccupiedByUser => {
-                app.instructions = "This cell is already occupied by you.";
+                app.instructions = String::from("This cell is already occupied by you.");
             }
             PlaceTokenResult::Error => {
-                app.instructions = "Oops, something went wrong.";
+                app.instructions = String::from("Oops, something went wrong.");
             }
         }
     }

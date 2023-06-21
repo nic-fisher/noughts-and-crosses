@@ -3,7 +3,10 @@ use crate::{
     Event,
 };
 use rand::Rng;
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::{
+    fmt::{self, Display},
+    sync::mpsc::{self, Receiver, Sender},
+};
 use std::{thread, time::Duration};
 
 // Events sent
@@ -13,9 +16,37 @@ pub enum Action {
     PlaceTokenError,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum Character {
+    ChattyDave,
+    SpeedySteve,
+}
+
+impl Character {
+    pub fn full_name(&self) -> String {
+        match self {
+            Character::ChattyDave => String::from("Chatty Dave"),
+            Character::SpeedySteve => String::from("Speedy Steve"),
+        }
+    }
+}
+
+impl Display for Character {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let level = match &self {
+            Character::ChattyDave => "Dave",
+            Character::SpeedySteve => "Steve",
+        };
+
+        f.write_str(level)
+    }
+}
+
 // Events received
 pub enum Trigger {
     ComputersTurn(GameState),
+    // TODO - think of a better name
+    ComputersTurnFirst,
     Loser,
     Winner,
     Draw,
@@ -27,13 +58,19 @@ pub fn start(sender: Sender<Event>) -> Sender<Trigger> {
 
     std::thread::spawn(move || loop {
         match computer_receiver.recv().unwrap() {
-            Trigger::Draw => {
-                send_chat_event("Looks like it's a draw. Want to play again?", &sender);
-            }
             Trigger::ComputersTurn(game_state) => {
-                wait_in_seconds(2);
-                thinking(&sender);
-                wait_in_seconds(5);
+                match game_state.computer_character {
+                    Character::ChattyDave => {
+                        wait_in_seconds(2);
+                        thinking(&sender);
+                        wait_in_seconds(5);
+                    }
+                    Character::SpeedySteve => {
+                        wait_in_seconds(1);
+                        send_chat_event("🤔", &sender);
+                        wait_in_seconds(2);
+                    }
+                }
 
                 match find_empty_cell(game_state) {
                     Some((row, column)) => sender
@@ -50,13 +87,28 @@ pub fn start(sender: Sender<Event>) -> Sender<Trigger> {
                 send_chat_event("Winner, winner, chicken dinner 🏆", &sender);
                 wait_in_seconds(5);
                 send_chat_event(
-                    "Want to play again? Press N to start a new game and I can beat you again.",
+                    "Want to play again? Press N to clear the game board and I can beat you again.",
                     &sender,
                 );
             }
 
             Trigger::Loser => {
                 send_chat_event("Nicely played 👏", &sender);
+            }
+
+            Trigger::Draw => {
+                send_chat_event("Looks like it's a draw. Want to play again?", &sender);
+            }
+
+            Trigger::ComputersTurnFirst => {
+                wait_in_seconds(3);
+                let place_token_in_centre_cell = Action::PlaceToken(1, 1);
+
+                sender
+                    .send(Event::ComputerAction(place_token_in_centre_cell))
+                    .unwrap();
+
+                send_chat_event("Alright, you're up.", &sender);
             }
         }
     });

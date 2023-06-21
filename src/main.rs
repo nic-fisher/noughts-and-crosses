@@ -46,14 +46,16 @@ fn main() -> Result<(), io::Error> {
                 handle_user_input(&mut app, input_key, &computer_sender);
             }
             Event::ComputerAction(Action::Chat(words)) => {
-                app.chat = [String::from("Computer:"), words].join(" ");
+                app.chat = [format!("{}:", app.game_state.computer_character), words].join(" ");
             }
             Event::ComputerAction(Action::PlaceToken(row, column)) => {
                 app.computer_place_token((row, column), &computer_sender);
             }
             Event::ComputerAction(Action::PlaceTokenError) => {
-                app.instructions =
-                    "Oh no, looks like the computer has hit an error when trying to place a token"
+                app.instructions = format!(
+                    "Oh no, looks like {} has hit an error when trying to place a token",
+                    app.game_state.computer_character
+                )
             }
         }
     }
@@ -86,6 +88,9 @@ fn handle_user_input(app: &mut App, input_key: InputKey, computer_sender: &Sende
         InputKey::Enter => {
             app.enter(computer_sender);
         }
+        InputKey::Char('s') => {
+            app.start_game(computer_sender);
+        }
         InputKey::Char('n') => {
             app.new_game();
         }
@@ -94,6 +99,9 @@ fn handle_user_input(app: &mut App, input_key: InputKey, computer_sender: &Sende
         }
         InputKey::Char('e') => {
             app.update_level(Level::Easy);
+        }
+        InputKey::Char('c') => {
+            app.swap_computer_character();
         }
         InputKey::Unhandled => (),
         _ => (),
