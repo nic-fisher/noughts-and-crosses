@@ -15,8 +15,8 @@ pub fn draw(f: &mut tui::Frame<CrosstermBackend<io::Stdout>>, app: &App) {
         .margin(1)
         .constraints(
             [
-                Constraint::Percentage(25),
-                Constraint::Percentage(55),
+                Constraint::Percentage(30),
+                Constraint::Percentage(50),
                 Constraint::Percentage(10),
                 Constraint::Percentage(10),
             ]
